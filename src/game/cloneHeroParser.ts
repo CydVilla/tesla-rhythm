@@ -75,6 +75,17 @@ function unquote(value: string): string {
   return t;
 }
 
+/**
+ * Strip Clone Hero rich-text markup (e.g. `<color=#ffa500>Neversoft</color>`,
+ * `<b>`, `<i>`) that song.ini fields sometimes contain, so titles/charters
+ * display as plain text.
+ */
+export function stripFormatting(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const cleaned = value.replace(/<[^>]*>/g, "").trim();
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
 /** Parse `key = value` lines into a lowercased-key map (values unquoted). */
 function parseKeyValues(lines: readonly string[]): Map<string, string> {
   const map = new Map<string, string>();
@@ -198,10 +209,10 @@ export function parseSongIni(contents: string): CloneHeroSongMetadata {
   const kv = parseKeyValues(lines);
   const delay = kv.get("delay");
   return {
-    name: kv.get("name") ?? "Imported Song",
-    artist: kv.get("artist"),
-    charter: kv.get("charter") ?? kv.get("frets"),
-    year: kv.get("year"),
+    name: stripFormatting(kv.get("name")) ?? "Imported Song",
+    artist: stripFormatting(kv.get("artist")),
+    charter: stripFormatting(kv.get("charter") ?? kv.get("frets")),
+    year: stripFormatting(kv.get("year")),
     // song.ini `delay` is in milliseconds.
     offsetMs: delay !== undefined ? Math.round(Number(delay)) || 0 : undefined,
   };
@@ -242,10 +253,10 @@ export function readChartMetadata(contents: string): CloneHeroSongMetadata {
   const kv = parseKeyValues(sections.get("Song") ?? []);
   const offset = kv.get("offset");
   return {
-    name: kv.get("name") ?? "Imported Song",
-    artist: kv.get("artist"),
-    charter: kv.get("charter"),
-    year: kv.get("year"),
+    name: stripFormatting(kv.get("name")) ?? "Imported Song",
+    artist: stripFormatting(kv.get("artist")),
+    charter: stripFormatting(kv.get("charter")),
+    year: stripFormatting(kv.get("year")),
     // .chart [Song] Offset is in seconds.
     offsetMs: offset !== undefined ? Math.round((Number(offset) || 0) * 1000) : undefined,
   };

@@ -19,6 +19,7 @@ import {
   listMidiDifficulties,
   readChartMetadata,
   parseSongIni,
+  stripFormatting,
   type CloneHeroSongMetadata,
 } from "@/game/cloneHeroParser";
 import { parseSng } from "@/game/sngParser";
@@ -80,10 +81,10 @@ function sngToMetadata(
 ): CloneHeroSongMetadata {
   const delay = map.get("delay");
   return {
-    name: map.get("name") ?? fallbackName,
-    artist: map.get("artist"),
-    charter: map.get("charter"),
-    year: map.get("year"),
+    name: stripFormatting(map.get("name")) ?? fallbackName,
+    artist: stripFormatting(map.get("artist")),
+    charter: stripFormatting(map.get("charter")),
+    year: stripFormatting(map.get("year")),
     // .sng `delay` is in milliseconds (added to every note time).
     offsetMs: delay !== undefined ? Math.round(Number(delay)) || 0 : undefined,
   };
