@@ -1,14 +1,12 @@
 # Tesla Rhythm 🎵
 
-A touchscreen rhythm game for the **Tesla in-car browser** (parked use only). It
-is a Clone Hero / Rock Band–style game adapted for a large touchscreen:
-**tap-only**, five big lanes, a vertical falling-note highway, and a hit zone at
-the bottom. Upload any song and get an instantly playable chart.
+A touchscreen rhythm game for the **Tesla in-car browser**. It is a Clone Hero /
+Rock Band–style game adapted for a large touchscreen: **tap-only**, five big
+lanes, a vertical falling-note highway, and a hit zone at the bottom. Upload any
+song and get an instantly playable chart.
 
 Open source under the [MIT License](./LICENSE) — contributions (especially new
 catalog tracks!) are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md).
-
-> ⚠️ **Parked use only.** This is a game. Do not interact with it while driving.
 
 ## Features
 
@@ -17,6 +15,8 @@ catalog tracks!) are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md).
 - 🗂️ **Track catalog** (`/catalog`) lists every track and who contributed it.
 - 🎼 Upload audio → auto-generated chart. Two generators: **Auto-analyze**
   (real onset/tempo detection in a Web Worker) or a **Simple BPM grid**.
+- 🎸 **Clone Hero import**: drop a `.zip` song folder (or `.chart` / `.mid`) and
+  play it on the touchscreen.
 - ⏱️ Web Audio API as the timing source (precise, monotonic clock).
 - 🎯 Five lanes (green/red/yellow/blue/orange), large touch targets.
 - 🟢 Hit windows: Perfect ±35ms, Great ±70ms, Good ±110ms.
@@ -85,13 +85,21 @@ The whole pipeline runs **in your browser** — nothing is uploaded to a server:
 Auto-analyze is the first step of the real pipeline. Heavier server-side
 analysis and stem separation are planned; see `docs/aiChartGenerationPlan.md`.
 
-### What if I provide a Clone Hero chart?
+### Importing Clone Hero charts
 
-Clone Hero import is **not implemented yet**. The upload screen accepts audio
-only; if you choose a `.chart`, `.mid`, `song.ini`, `.zip`, or `.sng`, it's
-detected and you get a clear "not supported yet" notice (no crash, no broken
-chart). The parser stubs in `src/game/cloneHeroParser.ts` throw explicit
-"not implemented" errors. The full plan lives in
+Clone Hero import **is supported**. On `/upload`, drop a song-folder **`.zip`**
+(containing `song.ini` + `notes.chart`/`notes.mid` + audio) or a bare
+**`.chart`** / **`.mid`** file. The app:
+
+1. Unzips in the browser (`fflate`) and finds `song.ini`, the chart, and audio.
+2. Parses metadata + which difficulties exist (`src/game/cloneHeroParser.ts`).
+3. Lets you pick a difficulty, then converts the 5 frets → 5 lanes into a
+   `RhythmChart`. If the folder has audio it plays with sound; otherwise it plays
+   in silent mode.
+
+Adaptations for touch: sustains import as taps, chords are capped at 2 notes, and
+HOPO/forced/tap/star-power flags are dropped. `.sng` (packed) isn't supported yet
+— export the folder as a `.zip`. Details and remaining work:
 `docs/cloneHeroImportPlan.md`.
 
 ## Architecture
@@ -124,7 +132,7 @@ src/
     demoChart.ts       # built-in demo chart
     autoMapper.ts      # deterministic BPM-grid automapper (+ fallback)
     audioAnalysis.ts   # pure DSP: FFT, spectral-flux onsets, tempo, charting
-    cloneHeroParser.ts # typed stubs for future Clone Hero import
+    cloneHeroParser.ts # Clone Hero .chart / .mid / song.ini → RhythmChart
   data/
     tracks.ts          # the open-source track catalog (add tracks here)
   hooks/
@@ -133,6 +141,7 @@ src/
   lib/
     activeSong.ts      # in-memory hand-off between routes → /play
     analyzeClient.ts   # decode + drive the analysis worker (main thread)
+    cloneHeroClient.ts # unzip + inspect/import Clone Hero songs in-browser
   workers/
     analyzeWorker.ts   # runs audioAnalysis off the main thread
 docs/                  # future-work plans + references
@@ -178,10 +187,10 @@ dev server, check `/catalog`, and open a PR.
 
 ## Not built yet (intentionally)
 
-Server-side ML audio analysis, stem separation, a full Clone Hero parser,
-accounts, payments, a persistent online song library, copyrighted-song hosting,
-and native Tesla integration. (Client-side onset/tempo analysis **is** built —
-see Auto-analyze above.) See `docs/` for the plans:
+Server-side ML audio analysis, stem separation, `.sng` import, accounts,
+payments, a persistent online song library, copyrighted-song hosting, and native
+Tesla integration. (Client-side onset/tempo analysis **and** Clone Hero
+`.chart`/`.mid` import **are** built — see above.) See `docs/` for the plans:
 
 - `docs/aiChartGenerationPlan.md` — real chart generation pipeline.
 - `docs/serverSideAudioAnalysis.md` — where heavy DSP/ML should run.

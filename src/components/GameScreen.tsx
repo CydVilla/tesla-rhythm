@@ -143,7 +143,6 @@ export function GameScreen({
           </span>
         </div>
         <div className={styles.headerRight}>
-          <span className="parked-notice">Parked use only</span>
           <button type="button" className={styles.pauseBtn} onClick={togglePause}>
             {game.phase === "playing" ? "Pause" : "Play"}
           </button>

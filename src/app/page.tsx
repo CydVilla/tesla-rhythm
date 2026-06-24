@@ -10,7 +10,6 @@ export default function LandingPage(): React.JSX.Element {
 
       <header className={styles.top}>
         <span className={styles.brand}>TESLA RHYTHM</span>
-        <span className="parked-notice">Parked use only</span>
       </header>
 
       <section className={styles.hero}>
@@ -59,9 +58,6 @@ export default function LandingPage(): React.JSX.Element {
         </li>
       </ul>
 
-      <footer className={styles.footer}>
-        <span className="parked-notice">For use while parked only</span>
-      </footer>
     </main>
   );
 }

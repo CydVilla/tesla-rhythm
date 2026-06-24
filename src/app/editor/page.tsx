@@ -34,7 +34,6 @@ export default function EditorPage(): React.JSX.Element {
         <Link href="/" className={styles.back}>
           ‹ Home
         </Link>
-        <span className="parked-notice">Parked use only</span>
       </header>
 
       <div className={styles.banner}>

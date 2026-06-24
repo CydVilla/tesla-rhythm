@@ -3,9 +3,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Tesla Rhythm — Parked Play",
+  title: "Tesla Rhythm",
   description:
-    "A touchscreen rhythm game for the Tesla browser. Upload a song, get a generated chart, and tap along. Parked use only.",
+    "A touchscreen rhythm game for the Tesla browser. Upload a song, get a generated chart, and tap along.",
 };
 
 export const viewport: Viewport = {

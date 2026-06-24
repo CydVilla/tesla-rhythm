@@ -1,27 +1,40 @@
-# Clone Hero Import Plan
+# Clone Hero Import
 
 Goal: let users import existing Clone Hero song folders/ZIPs and play them with
-the touchscreen tap-only mechanics. The parsing entry points already exist as
-typed stubs in `src/game/cloneHeroParser.ts`; this document is the spec for
-filling them in.
+the touchscreen tap-only mechanics.
 
 ## Current behavior (what happens today)
 
-Clone Hero import is **not implemented yet**. Concretely:
+Clone Hero import is **implemented** for `.chart` and `.mid` (via a `.zip` song
+folder, or a bare chart file):
 
-- The `/upload` screen accepts **audio files only**. If you choose or drag in a
-  Clone Hero file (`.chart`, `.mid`, `.ini`/`song.ini`, `.zip`, `.sng`), the UI
-  detects it and shows a friendly notice pointing here — it does **not** silently
-  ignore it, and it does **not** attempt to parse it.
-- The parser functions in `src/game/cloneHeroParser.ts`
-  (`parseSongIni`, `parseNotesChart`, `parseNotesMidi`, `importCloneHeroSong`)
-  exist with correct TypeScript signatures but **throw** an explicit
-  "not implemented" error, so any programmatic caller fails loudly rather than
-  producing a broken chart.
+- The `/upload` screen accepts audio **and** Clone Hero files. Drop a `.zip`
+  song folder (or a bare `.chart` / `.mid`) and the UI reads it, shows the song
+  metadata + which difficulties exist, lets you pick one, and imports it.
+- Parsing lives in `src/game/cloneHeroParser.ts` (pure, no DOM):
+  - `parseSongIni` — INI metadata.
+  - `parseNotesChart` — full `.chart` parser (resolution + tempo map →
+    tick-to-ms, `[XxxSingle]` note sections).
+  - `parseNotesMidi` — a minimal Standard MIDI File reader (tempo track + the
+    guitar track's note-on events per difficulty).
+  - `importCloneHeroSong` — orchestrates the above into a `RhythmChart`.
+- ZIP intake + audio object URLs live in `src/lib/cloneHeroClient.ts`
+  (`inspectCloneHeroFile` / `importCloneHeroPackage`), using `fflate` to unzip
+  in the browser. If the folder includes audio (`song.ogg`, etc.) it plays with
+  sound; otherwise the chart plays in silent mode.
 
-So: providing a Clone Hero chart today results in a clear "not supported yet"
-message, not a crash and not a playable song. The rest of this document is the
-plan for making it actually work.
+### Known limitations / not yet done
+
+- `.sng` (Clone Hero's packed binary format) is not parsed — upload the folder
+  as a `.zip` instead.
+- Multi-stem audio is not mixed; we pick `song.*` (else `guitar.*`, else the
+  first audio file).
+- Sustains import as taps (length kept on `durationMs` but ignored by scoring);
+  HOPO/forced/tap/star-power flags are dropped; chords are capped at 2 notes.
+- No automatic onset-latency/offset reconciliation beyond `song.ini`/`.chart`
+  offset — use the in-game calibration if timing feels off.
+
+The rest of this document is the original spec, kept for reference.
 
 ## A Clone Hero song folder
 
@@ -79,5 +92,7 @@ Because v1 is **tap-only**, when importing:
 
 ## Status
 
-Not implemented. `cloneHeroParser.ts` currently throws explicit
-"not implemented" errors so callers fail loudly rather than silently.
+Implemented for `.chart` and `.mid` via `src/game/cloneHeroParser.ts` +
+`src/lib/cloneHeroClient.ts`. Remaining work: `.sng` support, multi-stem audio
+mixing, sustain/HOPO modeling, and smarter difficulty thinning for very dense
+Expert charts on touch.
