@@ -1,0 +1,153 @@
+.main {
+  min-height: 100dvh;
+  padding: clamp(16px, 3vw, 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.back {
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.intro {
+  max-width: 720px;
+}
+
+.title {
+  font-size: clamp(28px, 5vw, 44px);
+  font-weight: 850;
+  margin: 0 0 10px;
+}
+
+.subtitle {
+  color: var(--text-dim);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.inlineLink {
+  color: #818cf8;
+  border-bottom: 1px dashed rgba(129, 140, 248, 0.5);
+}
+
+.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.diff {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--diff);
+  border: 1px solid color-mix(in srgb, var(--diff) 50%, transparent);
+  background: color-mix(in srgb, var(--diff) 14%, transparent);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.badge {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.trackTitle {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 4px 0 0;
+}
+
+.artist {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.specs {
+  display: flex;
+  gap: 14px;
+  margin: 6px 0 4px;
+  font-size: 13px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.cardFooter {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.contributor {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.contributor a {
+  color: #818cf8;
+  border-bottom: 1px dashed rgba(129, 140, 248, 0.5);
+}
+
+.contributor strong {
+  color: var(--text);
+}
+
+.playBtn {
+  padding: 10px 22px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(180deg, #22c55e, #15803d);
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.playBtn:active {
+  transform: translateY(1px);
+}

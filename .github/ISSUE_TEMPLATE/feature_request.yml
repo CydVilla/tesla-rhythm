@@ -1,0 +1,55 @@
+name: "✨ Feature request"
+description: Suggest an idea or improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! Please keep in mind the project's scope: a
+        **tap-only**, parked-use touchscreen rhythm game.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What are you trying to do that's hard or impossible today?
+      placeholder: As a player, I want… so that…
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe what you'd like to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approaches you thought about.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Gameplay / mechanics
+        - Audio / timing / calibration
+        - Rendering / visuals
+        - Upload / AI chart generation
+        - Clone Hero import
+        - Catalog / library
+        - Editor
+        - Tesla / touchscreen UX
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This fits a parked-use, tap-only touchscreen game.
+          required: true
+        - label: This does not require hosting copyrighted audio.
+          required: true

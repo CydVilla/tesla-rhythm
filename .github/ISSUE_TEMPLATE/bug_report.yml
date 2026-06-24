@@ -1,0 +1,74 @@
+name: "🐞 Bug report"
+description: Report something that isn't working as expected
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! Please fill out the sections
+        below so we can reproduce and fix it quickly.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+      placeholder: When I tap a lane during the demo, the note isn't registered…
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce the behavior?
+      placeholder: |
+        1. Go to /play
+        2. Press Start
+        3. Tap the green lane when a note reaches the hit line
+        4. See that…
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: The note should register as a hit and increase the combo.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the app does this affect?
+      options:
+        - Gameplay / scoring
+        - Audio / timing / calibration
+        - Rendering / canvas
+        - Upload / automapper
+        - Catalog
+        - Editor
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device / browser
+      description: e.g. Tesla Model 3 browser, Chrome 126 on macOS, iPad Safari
+      placeholder: Chrome 126 on macOS
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots / console logs (optional)
+      description: Drag in screenshots or paste any console errors.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this isn't a duplicate.
+          required: true
+        - label: I'm on the latest `main` (or noted my version above).
+          required: false

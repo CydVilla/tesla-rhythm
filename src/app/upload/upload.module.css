@@ -1,0 +1,53 @@
+.main {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(16px, 3vw, 32px);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.back {
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: 24px 0;
+}
+
+.intro {
+  text-align: center;
+  max-width: 560px;
+}
+
+.title {
+  font-size: clamp(28px, 5vw, 42px);
+  font-weight: 850;
+  margin: 0 0 12px;
+}
+
+.subtitle {
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.demoLink {
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.demoLink a {
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.3);
+}

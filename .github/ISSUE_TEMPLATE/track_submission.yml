@@ -1,0 +1,66 @@
+name: "🎵 Track submission"
+description: Propose a new track for the catalog
+title: "[Track]: "
+labels: ["track"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Want to add a track to the catalog? You can submit the details here, or
+        (preferred) open a PR adding an entry to `src/data/tracks.ts`. See
+        `CONTRIBUTING.md` and `docs/trackCatalog.md`.
+
+        **Do not upload copyrighted audio.** Built-in tracks ship without audio
+        and play in demo mode.
+  - type: input
+    id: title
+    attributes:
+      label: Track title
+    validations:
+      required: true
+  - type: input
+    id: artist
+    attributes:
+      label: Artist / source
+      placeholder: Generated, or an original artist name you have rights to
+    validations:
+      required: true
+  - type: input
+    id: contributor
+    attributes:
+      label: Contributor (your name / GitHub handle)
+      description: This is shown publicly in the catalog as "added by …".
+    validations:
+      required: true
+  - type: dropdown
+    id: difficulty
+    attributes:
+      label: Difficulty
+      options: [easy, medium, hard, expert]
+    validations:
+      required: true
+  - type: input
+    id: bpm
+    attributes:
+      label: BPM
+      placeholder: "120"
+    validations:
+      required: true
+  - type: input
+    id: duration
+    attributes:
+      label: Duration (seconds)
+      placeholder: "90"
+    validations:
+      required: true
+  - type: checkboxes
+    id: rights
+    attributes:
+      label: Rights & scope
+      options:
+        - label: I am not adding copyrighted audio to the repo.
+          required: true
+        - label: I understand built-in tracks play in silent/demo mode.
+          required: true
+        - label: I'd like to open (or have opened) a PR editing `src/data/tracks.ts`.
+          required: false

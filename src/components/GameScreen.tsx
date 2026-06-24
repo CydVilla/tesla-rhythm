@@ -1,0 +1,308 @@
+"use client";
+
+/**
+ * GameScreen
+ *
+ * Composition root for an actual play session. It wires together:
+ *   - useAudioEngine (the clock + sound),
+ *   - useRhythmGame  (rules + transitions),
+ *   - GameCanvas     (rendering + the rAF loop),
+ *   - LaneControls / ScorePanel / CalibrationPanel (UI),
+ *   - keyboard input for desktop testing.
+ *
+ * It deliberately holds almost no gameplay logic itself — that lives in the
+ * pure modules and the two hooks. This file is orchestration + layout only.
+ */
+
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { CalibrationPanel } from "./CalibrationPanel";
+import { GameCanvas } from "./GameCanvas";
+import { LaneControls } from "./LaneControls";
+import { ScorePanel } from "./ScorePanel";
+import styles from "./GameScreen.module.css";
+
+import { KEYBOARD_LANE_MAP } from "@/game/constants";
+import { chartDurationMs } from "@/game/chartUtils";
+import { accuracyPercent } from "@/game/scoring";
+import type { Lane, RhythmChart } from "@/game/types";
+import { useAudioEngine } from "@/hooks/useAudioEngine";
+import { useRhythmGame } from "@/hooks/useRhythmGame";
+
+interface GameScreenProps {
+  chart: RhythmChart;
+  /** blob: URL for uploaded audio. Omit for demo/silent mode. */
+  audioUrl?: string;
+  title: string;
+  /** Optional secondary line (artist · contributor). */
+  subtitle?: string;
+}
+
+export function GameScreen({
+  chart,
+  audioUrl,
+  title,
+  subtitle,
+}: GameScreenProps): React.JSX.Element {
+  const audio = useAudioEngine();
+  const game = useRhythmGame(chart, audio);
+  const { tapLane, togglePause, start, restart } = game;
+
+  const [activeKeyLanes, setActiveKeyLanes] = useState<Set<Lane>>(new Set());
+  const [debug, setDebug] = useState({ song: 0, chart: 0 });
+
+  const tailMs = 2000;
+  const durationMs = useMemo(() => chartDurationMs(chart) + tailMs, [chart]);
+
+  // Load audio (or silent demo timeline) when the song changes.
+  const loadFromUrl = audio.loadFromUrl;
+  const loadSilent = audio.loadSilent;
+  useEffect(() => {
+    let cancelled = false;
+    if (audioUrl) {
+      loadFromUrl(audioUrl).catch(() => {
+        if (!cancelled) loadSilent(durationMs);
+      });
+    } else {
+      loadSilent(durationMs);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [audioUrl, durationMs, loadFromUrl, loadSilent]);
+
+  // Keyboard input (desktop testing): A/S/D/F/G lanes, Space play/pause.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        togglePause();
+        return;
+      }
+      const lane = KEYBOARD_LANE_MAP[e.key.toLowerCase()];
+      if (lane !== undefined) {
+        tapLane(lane);
+        setActiveKeyLanes((prev) => {
+          const next = new Set(prev);
+          next.add(lane);
+          return next;
+        });
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      const lane = KEYBOARD_LANE_MAP[e.key.toLowerCase()];
+      if (lane !== undefined) {
+        setActiveKeyLanes((prev) => {
+          if (!prev.has(lane)) return prev;
+          const next = new Set(prev);
+          next.delete(lane);
+          return next;
+        });
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [tapLane, togglePause]);
+
+  // Low-frequency debug clock (10 fps) so the calibration readout updates
+  // without coupling to the animation loop.
+  const getTimeMs = audio.getTimeMs;
+  const calibrationOffsetMs = game.calibrationOffsetMs;
+  useEffect(() => {
+    if (game.phase !== "playing") return;
+    const id = window.setInterval(() => {
+      const t = getTimeMs();
+      setDebug({ song: t, chart: t - chart.offsetMs + calibrationOffsetMs });
+    }, 100);
+    return () => window.clearInterval(id);
+  }, [game.phase, getTimeMs, calibrationOffsetMs, chart.offsetMs]);
+
+  const handleLanePress = useCallback((lane: Lane) => tapLane(lane), [tapLane]);
+
+  const showStart = game.phase === "idle";
+  const showPaused = game.phase === "paused";
+  const showFinished = game.phase === "finished";
+  const padsDisabled = game.phase !== "playing";
+
+  return (
+    <div className={styles.screen}>
+      <header className={styles.header}>
+        <div className={styles.headerLeft}>
+          <Link href="/" className={styles.back} aria-label="Back to home">
+            ‹ Home
+          </Link>
+          <span className={styles.titleGroup}>
+            <span className={styles.songTitle}>{title}</span>
+            {subtitle && <span className={styles.songSubtitle}>{subtitle}</span>}
+          </span>
+        </div>
+        <div className={styles.headerRight}>
+          <span className="parked-notice">Parked use only</span>
+          <button type="button" className={styles.pauseBtn} onClick={togglePause}>
+            {game.phase === "playing" ? "Pause" : "Play"}
+          </button>
+        </div>
+      </header>
+
+      <div className={styles.stage}>
+        <GameCanvas
+          chart={chart}
+          phase={game.phase}
+          getTimeMs={audio.getTimeMs}
+          getCalibrationOffsetMs={game.getCalibrationOffsetMs}
+          runtimeRef={game.runtimeRef}
+          feedbackRef={game.feedbackRef}
+          laneFlashRef={game.laneFlashRef}
+          onFrame={game.update}
+        />
+
+        <div className={`${styles.overlay} ${styles.overlayTopLeft}`}>
+          <ScorePanel score={game.score} />
+        </div>
+
+        <div className={`${styles.overlay} ${styles.overlayTopRight}`}>
+          <CalibrationPanel
+            calibrationOffsetMs={game.calibrationOffsetMs}
+            onAdjust={game.adjustCalibration}
+            onReset={game.resetCalibration}
+            songTimeMs={debug.song}
+            chartTimeMs={debug.chart}
+          />
+        </div>
+
+        {showStart && (
+          <Splash
+            title="Ready?"
+            subtitle="Tap the lanes (or A S D F G) in time with the notes."
+            actionLabel="Start"
+            onAction={start}
+          />
+        )}
+
+        {showPaused && (
+          <Splash
+            title="Paused"
+            subtitle="Take a breath."
+            actionLabel="Resume"
+            onAction={togglePause}
+            secondaryLabel="Restart"
+            onSecondary={restart}
+          />
+        )}
+
+        {showFinished && (
+          <Results
+            scoreText={game.score.score.toLocaleString()}
+            maxCombo={game.score.maxCombo}
+            accuracy={accuracyPercent(game.score)}
+            perfect={game.score.perfect}
+            great={game.score.great}
+            good={game.score.good}
+            miss={game.score.miss}
+            onReplay={restart}
+          />
+        )}
+      </div>
+
+      <footer className={styles.pads}>
+        <LaneControls
+          onLanePress={handleLanePress}
+          activeLanes={activeKeyLanes}
+          disabled={padsDisabled}
+        />
+      </footer>
+    </div>
+  );
+}
+
+function Splash({
+  title,
+  subtitle,
+  actionLabel,
+  onAction,
+  secondaryLabel,
+  onSecondary,
+}: {
+  title: string;
+  subtitle: string;
+  actionLabel: string;
+  onAction: () => void;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
+}): React.JSX.Element {
+  return (
+    <div className={styles.splash}>
+      <div className={styles.splashCard}>
+        <h2 className={styles.splashTitle}>{title}</h2>
+        <p className={styles.splashSubtitle}>{subtitle}</p>
+        <div className={styles.splashActions}>
+          <button type="button" className={styles.primaryBtn} onClick={onAction}>
+            {actionLabel}
+          </button>
+          {secondaryLabel && onSecondary && (
+            <button type="button" className={styles.secondaryBtn} onClick={onSecondary}>
+              {secondaryLabel}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Results({
+  scoreText,
+  maxCombo,
+  accuracy,
+  perfect,
+  great,
+  good,
+  miss,
+  onReplay,
+}: {
+  scoreText: string;
+  maxCombo: number;
+  accuracy: number;
+  perfect: number;
+  great: number;
+  good: number;
+  miss: number;
+  onReplay: () => void;
+}): React.JSX.Element {
+  return (
+    <div className={styles.splash}>
+      <div className={styles.splashCard}>
+        <h2 className={styles.splashTitle}>Song complete</h2>
+        <div className={styles.resultScore}>{scoreText}</div>
+        <div className={styles.resultGrid}>
+          <span>Accuracy</span>
+          <strong>{accuracy.toFixed(1)}%</strong>
+          <span>Max combo</span>
+          <strong>{maxCombo}</strong>
+          <span>Perfect</span>
+          <strong>{perfect}</strong>
+          <span>Great</span>
+          <strong>{great}</strong>
+          <span>Good</span>
+          <strong>{good}</strong>
+          <span>Miss</span>
+          <strong>{miss}</strong>
+        </div>
+        <div className={styles.splashActions}>
+          <button type="button" className={styles.primaryBtn} onClick={onReplay}>
+            Play again
+          </button>
+          <Link href="/" className={styles.secondaryBtn}>
+            Home
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
