@@ -6,21 +6,25 @@
  * Handles user audio upload entirely in the browser (no server):
  *   - reads file metadata,
  *   - probes duration via a hidden <audio> element,
- *   - lets the user pick difficulty + BPM and credit a contributor,
- *   - generates a placeholder chart with the deterministic automapper.
+ *   - lets the user pick a chart source (auto-analyze the audio, or a simple BPM
+ *     grid), difficulty + BPM, and credit a contributor,
+ *   - generates the chart and hands it back via onReady.
+ *
+ * "Auto-analyze" decodes the audio and runs real onset/tempo detection in a Web
+ * Worker (src/lib/analyzeClient.ts → src/workers/analyzeWorker.ts). If analysis
+ * fails or finds too few onsets, it transparently falls back to the deterministic
+ * BPM-grid automapper.
  *
  * If a non-audio file is provided (notably a Clone Hero chart/folder), we do NOT
  * silently ignore it — we show an explanatory notice, because Clone Hero import
  * is planned but not implemented yet (see docs/cloneHeroImportPlan.md).
- *
- * It does not render the game; it hands the finished result back via onReady so
- * the page can decide what to do (add to catalog, navigate, etc.).
  */
 
 import { useCallback, useRef, useState } from "react";
 
 import { generateAutoChart } from "@/game/autoMapper";
 import type { Difficulty, RhythmChart } from "@/game/types";
+import { analyzeFileToChart } from "@/lib/analyzeClient";
 
 import styles from "./UploadPanel.module.css";
 
@@ -43,6 +47,7 @@ interface FileMeta {
 }
 
 type UnsupportedKind = "clone-hero" | "other";
+type ChartSource = "analyze" | "grid";
 
 const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard", "expert"];
 
@@ -73,16 +78,23 @@ export function UploadPanel({ onReady }: UploadPanelProps): React.JSX.Element {
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [bpm, setBpm] = useState(120);
   const [contributor, setContributor] = useState("");
+  const [source, setSource] = useState<ChartSource>("analyze");
   const [unsupported, setUnsupported] = useState<UnsupportedKind | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [info, setInfo] = useState<string | null>(null);
+
   const previousUrlRef = useRef<string | null>(null);
+  const fileRef = useRef<File | null>(null);
 
   const handleFile = useCallback((file: File) => {
-    // Reject non-audio files gracefully (Clone Hero charts etc.).
     if (!file.type.startsWith("audio")) {
       setUnsupported(isCloneHeroFile(file.name) ? "clone-hero" : "other");
       return;
     }
     setUnsupported(null);
+    setInfo(null);
+    fileRef.current = file;
 
     if (previousUrlRef.current) {
       URL.revokeObjectURL(previousUrlRef.current);
@@ -123,25 +135,57 @@ export function UploadPanel({ onReady }: UploadPanelProps): React.JSX.Element {
     [handleFile],
   );
 
-  const canGenerate = audioUrl !== null && meta !== null;
+  const canGenerate = audioUrl !== null && meta !== null && !analyzing;
 
-  const handleGenerate = useCallback(() => {
+  const handleGenerate = useCallback(async () => {
     if (!audioUrl || !meta) return;
     const durationSeconds = meta.durationSeconds ?? 120;
-    const chart = generateAutoChart({
-      durationSeconds,
-      difficulty,
-      bpm,
-      title: meta.name.replace(/\.[^.]+$/, ""),
-      artist: "Your upload",
-    });
-    onReady({
-      audioUrl,
-      chart,
-      fileName: meta.name,
-      contributor: contributor.trim() || "You",
-    });
-  }, [audioUrl, meta, difficulty, bpm, contributor, onReady]);
+    const baseTitle = meta.name.replace(/\.[^.]+$/, "");
+    const finish = (chart: RhythmChart) =>
+      onReady({
+        audioUrl,
+        chart,
+        fileName: meta.name,
+        contributor: contributor.trim() || "You",
+      });
+
+    if (source === "analyze" && fileRef.current) {
+      setAnalyzing(true);
+      setProgress(0);
+      setInfo(null);
+      try {
+        const chart = await analyzeFileToChart(fileRef.current, {
+          difficulty,
+          bpmHint: bpm,
+          title: baseTitle,
+          artist: "Your upload",
+          onProgress: setProgress,
+        });
+        finish(chart);
+        return;
+      } catch {
+        setInfo("Couldn't analyze that audio — used a BPM grid instead.");
+      } finally {
+        setAnalyzing(false);
+      }
+    }
+
+    finish(
+      generateAutoChart({
+        durationSeconds,
+        difficulty,
+        bpm,
+        title: baseTitle,
+        artist: "Your upload",
+      }),
+    );
+  }, [audioUrl, meta, source, difficulty, bpm, contributor, onReady]);
+
+  const generateLabel = analyzing
+    ? `Analyzing… ${Math.round(progress * 100)}%`
+    : source === "analyze"
+      ? "Analyze & play"
+      : "Generate chart & play";
 
   return (
     <div className={styles.panel}>
@@ -175,6 +219,7 @@ export function UploadPanel({ onReady }: UploadPanelProps): React.JSX.Element {
           (mp3, wav, ogg, m4a…).
         </div>
       )}
+      {info && <div className={styles.info}>{info}</div>}
 
       {meta && (
         <dl className={styles.meta}>
@@ -184,6 +229,26 @@ export function UploadPanel({ onReady }: UploadPanelProps): React.JSX.Element {
           <Row label="Duration" value={formatDuration(meta.durationSeconds)} />
         </dl>
       )}
+
+      <div className={styles.field}>
+        <span className={styles.fieldLabel}>Chart source</span>
+        <div className={styles.segmented}>
+          <button
+            type="button"
+            className={`${styles.segBtn} ${source === "analyze" ? styles.segActive : ""}`}
+            onClick={() => setSource("analyze")}
+          >
+            Auto-analyze audio <em className={styles.beta}>beta</em>
+          </button>
+          <button
+            type="button"
+            className={`${styles.segBtn} ${source === "grid" ? styles.segActive : ""}`}
+            onClick={() => setSource("grid")}
+          >
+            Simple BPM grid
+          </button>
+        </div>
+      </div>
 
       <div className={styles.field}>
         <span className={styles.fieldLabel}>Difficulty</span>
@@ -203,7 +268,9 @@ export function UploadPanel({ onReady }: UploadPanelProps): React.JSX.Element {
 
       <div className={styles.fieldRow}>
         <div className={styles.field}>
-          <span className={styles.fieldLabel}>BPM</span>
+          <span className={styles.fieldLabel}>
+            BPM {source === "analyze" ? "(grid fallback)" : ""}
+          </span>
           <input
             type="number"
             className={styles.bpmInput}
@@ -229,18 +296,28 @@ export function UploadPanel({ onReady }: UploadPanelProps): React.JSX.Element {
         </div>
       </div>
 
+      {analyzing && (
+        <div className={styles.progressTrack} aria-label="Analysis progress">
+          <div
+            className={styles.progressFill}
+            style={{ width: `${Math.round(progress * 100)}%` }}
+          />
+        </div>
+      )}
+
       <button
         type="button"
         className={styles.generate}
         disabled={!canGenerate}
         onClick={handleGenerate}
       >
-        Generate chart &amp; play
+        {generateLabel}
       </button>
 
       <p className={styles.note}>
-        Charts are generated by a placeholder automapper on a BPM grid. Real audio
-        analysis (onset detection, beat tracking) is planned — see the docs.
+        Auto-analyze decodes your audio and detects musical onsets in your browser
+        (nothing is uploaded). It&apos;s a first pass — heavier server-side
+        analysis and stem separation are planned; see the docs.
       </p>
     </div>
   );

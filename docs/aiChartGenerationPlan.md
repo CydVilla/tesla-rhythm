@@ -1,11 +1,42 @@
 # AI Chart Generation Plan
 
-This document describes the *intended* real chart-generation pipeline that will
-eventually replace the placeholder automapper in `src/game/autoMapper.ts`.
+This document describes the real chart-generation pipeline that replaces (and
+will keep improving on) the placeholder automapper in `src/game/autoMapper.ts`.
 
-The placeholder generates notes on a fixed BPM grid. It is deterministic and
-playable but musically naive. The goal below is to produce charts that actually
-follow the music.
+There are now **two** generators, both emitting the same `RhythmChart`:
+
+1. **Grid automapper** (`src/game/autoMapper.ts`) — deterministic notes on a
+   fixed BPM grid. Playable but musically naive. Still used for the demo/catalog
+   tracks (which have no audio) and as a fallback.
+2. **Audio analyzer** (`src/game/audioAnalysis.ts`) — **implemented**. Decodes
+   the uploaded audio and places notes on *detected musical onsets* with a
+   detected tempo. Runs entirely client-side in a Web Worker. This is step 1 of
+   the incremental path below.
+
+The goal of the remaining steps is to keep improving chart musicality (stems,
+melodic lane motion, server-grade models) behind the same output contract.
+
+## Implemented: client-side analysis (Phase 1)
+
+`src/game/audioAnalysis.ts` is pure, dependency-free DSP so it is testable and
+runs in a worker on the Tesla browser with nothing to ship/break:
+
+- compact radix-2 **FFT** + Hann-windowed STFT,
+- **spectral-flux** onset-strength envelope,
+- **adaptive peak picking** (local-mean threshold + min spacing) → onset times,
+  strengths, and per-onset brightness (spectral centroid),
+- **tempo estimate** via autocorrelation of the onset envelope (informational),
+- difficulty-aware selection (strength percentile + min gap) and **lane
+  assignment** from range-normalized brightness, avoiding same-lane repeats.
+
+Orchestration:
+
+- `src/lib/analyzeClient.ts` — main thread: `decodeAudioData` → downmix to mono
+  → transfer PCM to the worker → resolve a `RhythmChart` (with progress).
+- `src/workers/analyzeWorker.ts` — runs the DSP off the main thread.
+- `UploadPanel` exposes a "Chart source" toggle (Auto-analyze / Simple BPM grid)
+  and transparently falls back to the grid if decoding fails or too few onsets
+  are found.
 
 ## Output contract (stable)
 
@@ -83,8 +114,11 @@ thin consumer of `RhythmChart` JSON.
 
 ## Incremental path
 
-1. Client-side BPM + onset detection in a Web Worker (no ML) → already a big
-   upgrade over the grid.
-2. Server endpoint `POST /api/analyze` returning `RhythmChart`.
-3. Add stem separation behind the same endpoint.
-4. Train/tune lane-assignment heuristics; add per-difficulty cleanup passes.
+1. ✅ **Done** — Client-side BPM + onset detection in a Web Worker (no ML).
+   See "Implemented: client-side analysis" above.
+2. Beat-grid snapping of detected onsets (tighter, more readable charts) +
+   onset-latency compensation.
+3. Server endpoint `POST /api/analyze` returning `RhythmChart` (for heavier
+   models / longer tracks). See `serverSideAudioAnalysis.md`.
+4. Add stem separation (Demucs/Spleeter) behind the same endpoint.
+5. Train/tune lane-assignment heuristics; add per-difficulty cleanup passes.

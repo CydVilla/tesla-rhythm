@@ -52,9 +52,9 @@ export default function UploadPage(): React.JSX.Element {
           <h1 className={styles.title}>Upload a song</h1>
           <p className={styles.subtitle}>
             Pick an audio file from this device. It stays in your browser — nothing
-            is uploaded to a server. We&apos;ll generate a playable chart on a BPM
-            grid so you can play immediately, and add it to the catalog for this
-            session.
+            is uploaded to a server. We&apos;ll generate a playable chart — by
+            analyzing the audio or on a quick BPM grid — and add it to the catalog
+            for this session.
           </p>
         </div>
 

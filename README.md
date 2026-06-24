@@ -15,7 +15,8 @@ catalog tracks!) are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md).
 - 🎮 Playable vertical slice: works with zero setup.
 - 🎲 **Play random** picks a track from the catalog each time.
 - 🗂️ **Track catalog** (`/catalog`) lists every track and who contributed it.
-- 🎼 Upload audio → auto-generated chart (placeholder automapper on a BPM grid).
+- 🎼 Upload audio → auto-generated chart. Two generators: **Auto-analyze**
+  (real onset/tempo detection in a Web Worker) or a **Simple BPM grid**.
 - ⏱️ Web Audio API as the timing source (precise, monotonic clock).
 - 🎯 Five lanes (green/red/yellow/blue/orange), large touch targets.
 - 🟢 Hit windows: Perfect ±35ms, Great ±70ms, Good ±110ms.
@@ -64,18 +65,25 @@ The whole pipeline runs **in your browser** — nothing is uploaded to a server:
 1. You pick an audio file. We create a `blob:` object URL for playback and read
    its metadata (name, size, MIME type), then probe its **duration** with a
    hidden `<audio>` element.
-2. You choose **difficulty** and **BPM** (default 120) and optionally your name.
-3. The **automapper** (`src/game/autoMapper.ts`) generates a `RhythmChart` on a
-   BPM grid: it walks beats at a per-difficulty step, places notes with a
-   per-difficulty fill probability, avoids same-lane repeats / awkward jumps, and
-   adds occasional chords on harder difficulties. It's **deterministic** (seeded
-   from duration + difficulty + BPM), so the same inputs always yield the same
-   chart.
+2. You choose a **chart source**, **difficulty**, and **BPM** (default 120), and
+   optionally your name for the catalog.
+3. The chart is generated as a `RhythmChart`:
+   - **Auto-analyze audio (beta)** — decodes the file with `decodeAudioData`,
+     downmixes to mono, and runs real DSP in a **Web Worker**
+     (`src/game/audioAnalysis.ts`): a Hann-windowed FFT → **spectral-flux onset
+     detection** → adaptive peak picking → **tempo estimate** (autocorrelation) →
+     difficulty-aware selection and brightness-based lane assignment. Notes land
+     on actual musical onsets. A progress bar shows analysis status. If decoding
+     fails or too few onsets are found, it **falls back to the grid**.
+   - **Simple BPM grid** — the deterministic `src/game/autoMapper.ts`: walks
+     beats at a per-difficulty step, places notes with a per-difficulty fill
+     probability, avoids same-lane repeats / awkward jumps, and adds occasional
+     chords on harder difficulties. Seeded from duration + difficulty + BPM.
 4. The track is added to the **catalog** for this session (with your name) and
    `/play` opens, syncing the chart to the audio via `AudioContext.currentTime`.
 
-This is a placeholder — real audio analysis (beat tracking, onset detection,
-stem separation) is planned; see `docs/aiChartGenerationPlan.md`.
+Auto-analyze is the first step of the real pipeline. Heavier server-side
+analysis and stem separation are planned; see `docs/aiChartGenerationPlan.md`.
 
 ### What if I provide a Clone Hero chart?
 
@@ -114,7 +122,8 @@ src/
     scoring.ts         # hit detection, rating, combo, miss marking, accuracy
     chartUtils.ts      # ids, sorting, validation, runtime-state construction
     demoChart.ts       # built-in demo chart
-    autoMapper.ts      # deterministic placeholder automapper
+    autoMapper.ts      # deterministic BPM-grid automapper (+ fallback)
+    audioAnalysis.ts   # pure DSP: FFT, spectral-flux onsets, tempo, charting
     cloneHeroParser.ts # typed stubs for future Clone Hero import
   data/
     tracks.ts          # the open-source track catalog (add tracks here)
@@ -123,6 +132,9 @@ src/
     useRhythmGame.ts   # orchestrates rules + React state transitions
   lib/
     activeSong.ts      # in-memory hand-off between routes → /play
+    analyzeClient.ts   # decode + drive the analysis worker (main thread)
+  workers/
+    analyzeWorker.ts   # runs audioAnalysis off the main thread
 docs/                  # future-work plans + references
 .github/               # issue forms (bug / feature / track) + PR template
 ```
@@ -137,8 +149,11 @@ docs/                  # future-work plans + references
 - **Pure rules.** `scoring.ts` and `timing.ts` are deterministic functions of
   their inputs — easy to unit test (find hittable note, rating for error, mark
   missed notes, apply hit/miss, accuracy).
-- **Stable output contract.** The automapper and (future) Clone Hero importer
-  both produce the same `RhythmChart` JSON the game consumes.
+- **Stable output contract.** The grid automapper, the audio analyzer, and the
+  (future) Clone Hero importer all produce the same `RhythmChart` JSON the game
+  consumes — so generators can be swapped without touching gameplay.
+- **Heavy work off the main thread.** Audio analysis (FFT/onset detection) runs
+  in a Web Worker; PCM is *transferred* (not copied) to keep the UI responsive.
 
 ## Calibration explained
 
@@ -163,9 +178,10 @@ dev server, check `/catalog`, and open a PR.
 
 ## Not built yet (intentionally)
 
-Real AI audio analysis, server-side stem separation, a full Clone Hero parser,
+Server-side ML audio analysis, stem separation, a full Clone Hero parser,
 accounts, payments, a persistent online song library, copyrighted-song hosting,
-and native Tesla integration. See `docs/` for the plans:
+and native Tesla integration. (Client-side onset/tempo analysis **is** built —
+see Auto-analyze above.) See `docs/` for the plans:
 
 - `docs/aiChartGenerationPlan.md` — real chart generation pipeline.
 - `docs/serverSideAudioAnalysis.md` — where heavy DSP/ML should run.

@@ -55,7 +55,7 @@ export default function LandingPage(): React.JSX.Element {
         </li>
         <li>
           <strong>Instant charts</strong>
-          <span>A placeholder automapper makes any upload playable right away.</span>
+          <span>Auto-analyze your audio for onset-timed notes, or use a quick BPM grid.</span>
         </li>
       </ul>
 
