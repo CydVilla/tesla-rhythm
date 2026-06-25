@@ -15,6 +15,9 @@ catalog tracks!) are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md).
 - 🗂️ **Track catalog** (`/catalog`) lists every track and who contributed it.
 - 🎼 Upload audio → auto-generated chart. Two generators: **Auto-analyze**
   (real onset/tempo detection in a Web Worker) or a **Simple BPM grid**.
+- 🔎 **Search YouTube** from inside the app (optional — needs an API key, see
+  below) and pick a result instead of pasting a link. Falls back to pasting a
+  link when search isn't configured.
 - 🎸 **Clone Hero import**: drop a `.sng`, a `.zip` song folder, an unzipped
   **song folder** (drag-and-drop or "Choose folder"), or a bare `.chart` /
   `.mid` and play it on the touchscreen.
@@ -34,6 +37,24 @@ npm run dev
 ```
 
 Then open <http://localhost:3000>.
+
+### Optional: enable in-app YouTube search
+
+The Upload screen can search YouTube directly so users don't have to paste a
+link. This uses the **YouTube Data API v3**, which needs an API key. The key is
+kept server-side (it's never shipped to the browser) and used by the
+`/api/youtube/search` route.
+
+1. Create an API key in the [Google Cloud Console](https://console.cloud.google.com/)
+   and enable the **YouTube Data API v3**.
+2. Add it to `.env.local` (or your deployment's environment variables):
+
+   ```bash
+   YOUTUBE_API_KEY=your_key_here
+   ```
+
+Without a key, search is disabled gracefully and the UI falls back to the
+paste-a-link flow — nothing breaks.
 
 - `/` — landing page (Play random / Browse catalog / Upload song).
 - `/play` — the game (falls back to a random catalog track in silent mode).
