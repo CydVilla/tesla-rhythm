@@ -149,6 +149,10 @@
 .footer {
   display: flex;
   justify-content: center;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .githubLink {
@@ -177,4 +181,43 @@
 
 .githubIcon {
   display: block;
+}
+
+/* Phones / narrow screens. The base layout clusters the hero at the bottom
+   (hero has margin-top:auto); on a small screen that crams everything against
+   the bottom edge and pushes the footer behind the home indicator. Let content
+   flow from the top instead, stack the action buttons full-width, and reserve
+   space for the safe-area inset so the footer is never clipped. */
+@media (max-width: 640px) {
+  .main {
+    gap: 24px;
+    padding: 20px 18px;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .hero {
+    margin-top: 24px;
+    gap: 18px;
+  }
+
+  .actions {
+    gap: 10px;
+  }
+
+  .actions .btn {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    padding: 16px 24px;
+    font-size: 17px;
+  }
+
+  .features {
+    grid-template-columns: 1fr;
+  }
+
+  .footer {
+    margin-top: 4px;
+    padding-top: 18px;
+  }
 }

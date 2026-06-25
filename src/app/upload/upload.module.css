@@ -51,3 +51,15 @@
 .demoLink a {
   border-bottom: 1px dashed rgba(255, 255, 255, 0.3);
 }
+
+@media (max-width: 640px) {
+  .main {
+    padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .body {
+    justify-content: flex-start;
+    gap: 20px;
+    padding: 16px 0;
+  }
+}

@@ -20,8 +20,8 @@ export default function LandingPage(): React.JSX.Element {
         </h1>
         <p className={styles.subtitle}>
           A Clone&nbsp;Hero–style rhythm game built for a big touchscreen. Upload
-          a track or paste a YouTube link, get an instant playable chart, and tap
-          five large lanes in time with the music — no guitar controller required.
+          a track or search YouTube, get an instant playable chart, and tap five
+          large lanes in time with the music — no guitar controller required.
         </p>
 
         <div className={styles.actions}>
