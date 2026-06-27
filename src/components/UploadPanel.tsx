@@ -58,6 +58,36 @@ interface UploadPanelProps {
 
 type UploadMode = "file" | "youtube";
 
+/** One YouTube search result, as returned by /api/youtube/search. */
+interface YouTubeSearchItem {
+  id: string;
+  title: string;
+  channelTitle: string;
+  thumbnail: string;
+  durationSeconds: number;
+  durationLabel: string;
+}
+
+/**
+ * YouTube API titles arrive HTML-escaped (e.g. "Rock &amp; Roll"). Decode them
+ * for display. Runs only in the browser; falls back to the raw text on the
+ * server (this is a client component, so that path is just a safety net).
+ */
+function decodeEntities(text: string): string {
+  if (typeof document === "undefined") return text;
+  const el = document.createElement("textarea");
+  el.innerHTML = text;
+  return el.value;
+}
+
+/** Format seconds as an "m:ss" string that parseLengthSeconds() accepts. */
+function lengthFieldFromSeconds(totalSeconds: number): string {
+  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return "3:00";
+  const m = Math.floor(totalSeconds / 60);
+  const s = Math.floor(totalSeconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 interface FileMeta {
   name: string;
   size: number;
@@ -175,6 +205,15 @@ export function UploadPanel({ onReady, youtubeOnly = false }: UploadPanelProps):
   const [ytUrl, setYtUrl] = useState("");
   const [ytTitle, setYtTitle] = useState("");
   const [ytLength, setYtLength] = useState("3:00");
+
+  // In-app YouTube search (optional; needs YOUTUBE_API_KEY on the server).
+  const [ytQuery, setYtQuery] = useState("");
+  const [ytResults, setYtResults] = useState<YouTubeSearchItem[]>([]);
+  const [ytSearching, setYtSearching] = useState(false);
+  const [ytSearchError, setYtSearchError] = useState<string | null>(null);
+  const [ytSearchConfigured, setYtSearchConfigured] = useState<boolean | null>(null);
+  const [ytSelectedId, setYtSelectedId] = useState<string | null>(null);
+  const [showPaste, setShowPaste] = useState(false);
 
   // Clone Hero import state.
   const [chPkg, setChPkg] = useState<CloneHeroPackage | null>(null);
@@ -377,6 +416,73 @@ export function UploadPanel({ onReady, youtubeOnly = false }: UploadPanelProps):
     });
   }, [ytUrl, ytLength, ytTitle, difficulty, bpm, contributor, onReady]);
 
+  // Debounced YouTube search. Calls our server proxy (which holds the API key)
+  // and degrades gracefully when search isn't configured by revealing the
+  // paste-a-link field instead.
+  useEffect(() => {
+    if (mode !== "youtube") return;
+    const q = ytQuery.trim();
+    if (q.length < 2) {
+      setYtResults([]);
+      setYtSearching(false);
+      setYtSearchError(null);
+      return;
+    }
+    let cancelled = false;
+    setYtSearching(true);
+    const handle = setTimeout(() => {
+      fetch(`/api/youtube/search?q=${encodeURIComponent(q)}`)
+        .then(async (res) => {
+          const data = await res.json().catch(() => ({}));
+          if (cancelled) return;
+          const configured = data.configured ?? false;
+          setYtSearchConfigured(configured);
+          if (!configured) {
+            setShowPaste(true);
+            setYtResults([]);
+            setYtSearchError(null);
+          } else if (!res.ok) {
+            setYtResults([]);
+            setYtSearchError(data.error ?? "Search failed — try pasting a link.");
+          } else {
+            setYtResults(data.items ?? []);
+            setYtSearchError(null);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setYtResults([]);
+            setYtSearchError("Search failed — check your connection or paste a link.");
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setYtSearching(false);
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [ytQuery, mode]);
+
+  const handleSelectResult = useCallback((item: YouTubeSearchItem) => {
+    setYtSelectedId(item.id);
+    // parseYouTubeId() accepts a bare 11-char id, so we can reuse handleYouTube.
+    setYtUrl(item.id);
+    setYtTitle(decodeEntities(item.title));
+    if (item.durationSeconds > 0) {
+      setYtLength(lengthFieldFromSeconds(item.durationSeconds));
+    }
+    setError(null);
+    // Collapse the results menu now that a pick has been made. Clearing the
+    // query also stops the debounced search from immediately re-opening it; the
+    // chosen track stays reflected in the Title field below.
+    setYtQuery("");
+    setYtResults([]);
+    setYtSearchError(null);
+    setYtSearching(false);
+  }, []);
+
   const canGenerate = audioUrl !== null && meta !== null && !analyzing;
 
   const handleGenerate = useCallback(async () => {
@@ -543,16 +649,102 @@ export function UploadPanel({ onReady, youtubeOnly = false }: UploadPanelProps):
       {mode === "youtube" && (
         <>
           <div className={styles.field}>
-            <span className={styles.fieldLabel}>YouTube link</span>
+            <span className={styles.fieldLabel}>Search for a song</span>
             <input
-              type="url"
-              inputMode="url"
+              type="search"
+              inputMode="search"
               className={styles.textInput}
-              placeholder="https://www.youtube.com/watch?v=…"
-              value={ytUrl}
-              onChange={(e) => setYtUrl(e.target.value)}
+              placeholder="Search YouTube — song or artist…"
+              value={ytQuery}
+              onChange={(e) => setYtQuery(e.target.value)}
             />
           </div>
+
+          {ytSearching && (
+            <div className={styles.searchStatus}>Searching…</div>
+          )}
+
+          {ytSearchConfigured === false && ytQuery.trim().length >= 2 && (
+            <div className={styles.info}>
+              In-app search isn&apos;t available right now — paste a YouTube link
+              below instead.
+            </div>
+          )}
+
+          {ytSearchError && <div className={styles.info}>{ytSearchError}</div>}
+
+          {ytSelectedId && ytResults.length === 0 && !ytSearching && (
+            <div className={styles.searchStatus}>
+              Selected ✓ — adjust the details below, or search again to change it.
+            </div>
+          )}
+
+          {ytResults.length > 0 && (
+            <ul className={styles.results}>
+              {ytResults.map((item) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    className={`${styles.resultBtn} ${ytSelectedId === item.id ? styles.resultActive : ""}`}
+                    onClick={() => handleSelectResult(item)}
+                  >
+                    {item.thumbnail ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        className={styles.resultThumb}
+                        src={item.thumbnail}
+                        alt=""
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className={styles.resultThumb} aria-hidden />
+                    )}
+                    <span className={styles.resultInfo}>
+                      <span className={styles.resultTitle}>
+                        {decodeEntities(item.title)}
+                      </span>
+                      <span className={styles.resultMeta}>
+                        {decodeEntities(item.channelTitle)}
+                        {item.durationLabel !== "—"
+                          ? ` · ${item.durationLabel}`
+                          : ""}
+                      </span>
+                    </span>
+                    {ytSelectedId === item.id && (
+                      <span className={styles.resultCheck} aria-hidden>
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <button
+            type="button"
+            className={styles.linkToggle}
+            onClick={() => setShowPaste((v) => !v)}
+          >
+            {showPaste ? "Hide link field" : "Or paste a YouTube link instead"}
+          </button>
+
+          {(showPaste || ytSearchConfigured === false) && (
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>YouTube link</span>
+              <input
+                type="url"
+                inputMode="url"
+                className={styles.textInput}
+                placeholder="https://www.youtube.com/watch?v=…"
+                value={ytUrl}
+                onChange={(e) => {
+                  setYtUrl(e.target.value);
+                  setYtSelectedId(null);
+                }}
+              />
+            </div>
+          )}
 
           <div className={styles.field}>
             <span className={styles.fieldLabel}>Title (for the catalog)</span>

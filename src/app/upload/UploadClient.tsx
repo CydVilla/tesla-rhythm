@@ -57,16 +57,16 @@ export function UploadClient({
           <p className={styles.subtitle}>
             {youtubeOnly ? (
               <>
-                Paste a YouTube link and we&apos;ll play it in an embedded player
-                with a generated chart. (File upload isn&apos;t available on the
-                Tesla browser.)
+                Search YouTube (or paste a link) and we&apos;ll play it in an
+                embedded player with a generated chart. (File upload isn&apos;t
+                available on the Tesla browser.)
               </>
             ) : (
               <>
                 Pick an audio file or Clone Hero song (.sng / .zip / .chart /
-                .mid), or paste a YouTube link. Files stay in your browser —
-                nothing is uploaded to a server. We&apos;ll generate a playable
-                chart and add it to the catalog for this session.
+                .mid), or search YouTube (or paste a link). Files stay in your
+                browser — nothing is uploaded to a server. We&apos;ll generate a
+                playable chart and add it to the catalog for this session.
               </>
             )}
           </p>
