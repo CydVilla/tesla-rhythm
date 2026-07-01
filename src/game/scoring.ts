@@ -6,19 +6,37 @@
 import {
   COMBO_MULTIPLIERS,
   HIT_WINDOWS,
+  HOLD_RELEASE_GRACE_MS,
+  MIN_HOLD_MS,
   MISS_THRESHOLD_MS,
   SCORE_VALUES,
+  SUSTAIN_POINTS_PER_MS,
 } from "./constants";
-import { timingErrorMs } from "./timing";
+import { sustainEndTimeMs, timingErrorMs } from "./timing";
 import type {
   ChartNote,
   HitJudgement,
   HitRating,
   HitResult,
+  HoldReleaseResult,
   Lane,
   NoteRuntimeState,
   ScoreState,
 } from "./types";
+
+/**
+ * Whether a note should be played as a sustain (hold) rather than a tap. A note
+ * qualifies if it carries a meaningful duration; the explicit `type: "hold"`
+ * flag is honoured too, but the duration is what actually drives gameplay.
+ * Durations below MIN_HOLD_MS are treated as taps.
+ */
+export function isHoldNote(
+  note: Pick<ChartNote, "durationMs" | "type">,
+): boolean {
+  const duration = note.durationMs ?? 0;
+  if (note.type === "tap") return false;
+  return duration >= MIN_HOLD_MS;
+}
 
 export function createInitialScore(totalNotes: number): ScoreState {
   return {
@@ -122,7 +140,64 @@ export function resolveTap(
     return { kind: "miss-input" };
   }
 
-  return { kind: "hit", note, rating, errorMs };
+  return { kind: "hit", note, rating, errorMs, startsHold: isHoldNote(note) };
+}
+
+/**
+ * Resolve a release (finger/key up) on `lane` at `songTimeMs`. Looks for a hold
+ * note currently in the "holding" phase in that lane and decides whether the
+ * player let go in time.
+ *
+ * Pure: does not mutate runtime or score; the caller applies the result.
+ */
+export function resolveRelease(
+  notes: readonly ChartNote[],
+  runtime: ReadonlyMap<string, NoteRuntimeState>,
+  lane: Lane,
+  songTimeMs: number,
+  chartOffsetMs: number,
+  calibrationOffsetMs: number,
+): HoldReleaseResult {
+  for (const note of notes) {
+    if (note.lane !== lane) continue;
+    if (runtime.get(note.id)?.hold !== "holding") continue;
+
+    const end = sustainEndTimeMs(note, chartOffsetMs, calibrationOffsetMs);
+    if (songTimeMs >= end - HOLD_RELEASE_GRACE_MS) {
+      return { kind: "completed", note };
+    }
+    return { kind: "dropped", note, earlyMs: end - songTimeMs };
+  }
+  return { kind: "none" };
+}
+
+/**
+ * Ids of hold notes whose tail has fully elapsed while still being held (i.e.
+ * the player kept the lane pressed through the end). These auto-complete each
+ * frame so a sustain resolves even if the player never explicitly releases.
+ * Pure: returns the ids to complete; the caller updates runtime/score.
+ */
+export function findCompletedHoldIds(
+  notes: readonly ChartNote[],
+  runtime: ReadonlyMap<string, NoteRuntimeState>,
+  songTimeMs: number,
+  chartOffsetMs: number,
+  calibrationOffsetMs: number,
+): string[] {
+  const done: string[] = [];
+  for (const note of notes) {
+    if (runtime.get(note.id)?.hold !== "holding") continue;
+    const end = sustainEndTimeMs(note, chartOffsetMs, calibrationOffsetMs);
+    if (songTimeMs >= end - HOLD_RELEASE_GRACE_MS) {
+      done.push(note.id);
+    }
+  }
+  return done;
+}
+
+/** Sustain bonus points for holding `durationMs`, before the combo multiplier. */
+export function holdBonusPoints(durationMs: number): number {
+  return Math.round(Math.max(0, durationMs) * SUSTAIN_POINTS_PER_MS);
 }
 
 /** Apply a successful judgement to a score state, returning a NEW state. */
@@ -146,6 +221,34 @@ export function applyMiss(score: ScoreState): ScoreState {
     ...score,
     combo: 0,
     miss: score.miss + 1,
+  };
+}
+
+/**
+ * Apply a completed sustain: award the length-scaled bonus at the current combo
+ * multiplier. Combo is left untouched — the head hit already advanced it, and a
+ * sustain is a single note, not a stream of hits. Returns a NEW state.
+ */
+export function applyHoldComplete(
+  score: ScoreState,
+  durationMs: number,
+): ScoreState {
+  const bonus = holdBonusPoints(durationMs) * comboMultiplier(score.combo);
+  return {
+    ...score,
+    score: score.score + bonus,
+  };
+}
+
+/**
+ * Apply a dropped sustain: releasing early breaks the combo (Rock Band style)
+ * but does not add a miss — the note's head was already judged and counted, so
+ * accuracy and completion are unaffected. Returns a NEW state.
+ */
+export function applyHoldDrop(score: ScoreState): ScoreState {
+  return {
+    ...score,
+    combo: 0,
   };
 }
 

@@ -39,6 +39,29 @@ export const SCORE_VALUES: Record<HitJudgement, number> = {
 };
 
 /**
+ * Minimum sustain length (ms) for a note to be treated as a hold. Shorter
+ * "durations" (e.g. imported dust from a chart) play as plain taps so a stray
+ * few-ms sustain never demands an awkward micro-hold on a touchscreen.
+ */
+export const MIN_HOLD_MS = 160;
+
+/**
+ * Sustain bonus rate: extra points earned per second the tail is held, before
+ * the combo multiplier. A 1s hold at ×1 is worth 500; the head hit is scored
+ * separately with the usual SCORE_VALUES.
+ */
+export const SUSTAIN_POINTS_PER_MS = 0.5;
+
+/**
+ * Release grace for sustains (ms). Lifting the finger within this window of the
+ * tail's end still counts as a completed hold — fingers leave a touchscreen a
+ * hair early, so a small amount of slack keeps completions from feeling unfair.
+ * Symmetric: the tail is also considered "held through" once song time reaches
+ * `sustainEnd - grace`, so a held note auto-completes without a late release.
+ */
+export const HOLD_RELEASE_GRACE_MS = 120;
+
+/**
  * Combo multiplier tiers. Each entry is [minCombo, multiplier], sorted
  * descending so we can return the first match.
  */
