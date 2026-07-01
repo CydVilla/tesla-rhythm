@@ -6,17 +6,19 @@
  *   - notes.chart→ RhythmChart (.chart text format, tempo-mapped)
  *   - notes.mid  → RhythmChart (minimal Standard MIDI File reader)
  *
- * The 5 colored frets (0–4) map directly onto our 5 lanes. Because the
- * touchscreen MVP is tap-only, sustains are imported as taps (their length is
- * kept on `durationMs` for reference but ignored by scoring), open notes (.chart
- * fret 7) map to a center lane, and modifier flags (forced/HOPO/tap/star power)
- * are dropped. Chords are capped at 2 simultaneous notes to stay finger-playable.
+ * The 5 colored frets (0–4) map directly onto our 5 lanes. Sustains import as
+ * playable holds — their `durationMs` is preserved and long-enough sustains are
+ * tagged `type: "hold"` so the player must keep the lane pressed through the
+ * tail. Open notes (.chart fret 7) map to a center lane, and modifier flags
+ * (forced/HOPO/tap/star power) are dropped. Chords are capped at 2 simultaneous
+ * notes to stay finger-playable.
  *
  * Pure & dependency-free (no DOM); ZIP intake / audio object URLs live in
  * `src/lib/cloneHeroClient.ts`. See docs/cloneHeroImportPlan.md.
  */
 
 import { makeNoteId, sortNotes } from "./chartUtils";
+import { MIN_HOLD_MS } from "./constants";
 import type { ChartNote, Difficulty, Lane, RhythmChart } from "./types";
 
 export interface CloneHeroSongMetadata {
@@ -163,11 +165,14 @@ function assembleChart(
     const startMs = tickToMs(n.tick);
     const lengthMs =
       n.lengthTicks > 0 ? Math.round(tickToMs(n.tick + n.lengthTicks) - startMs) : 0;
+    // Sustains long enough to be worth holding become playable holds; shorter
+    // ones (chart dust) stay taps but keep their length for reference/rendering.
+    const isHold = lengthMs >= MIN_HOLD_MS;
     const note: ChartNote = {
       id: makeNoteId("ch"),
       timeMs: Math.max(0, Math.round(startMs)),
       lane: n.lane,
-      type: "tap",
+      type: isHold ? "hold" : "tap",
     };
     if (lengthMs > 0) note.durationMs = lengthMs;
     return note;

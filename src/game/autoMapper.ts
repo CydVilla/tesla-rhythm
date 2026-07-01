@@ -43,21 +43,27 @@ interface DifficultyProfile {
    * partners share a timestamp and are exempt.
    */
   minGapMs: number;
+  /** Probability [0..1] that a lone note becomes a sustain (hold). */
+  holdChance: number;
+  /** Sustain length in beats when a note is turned into a hold. */
+  holdBeats: number;
 }
 
 // Densities are deliberately conservative for tap-the-note touchscreen play.
 // Rough sustained ceilings (from minGapMs): easy ~2/s, medium ~3/s, hard ~4/s,
 // expert ~5.5/s — and fillChance keeps the average well below those peaks.
+// Holds are more common (and longer) on easier charts, where the calmer pace
+// leaves room to sit on a sustain; harder charts favour dense taps/chords.
 const PROFILES: Record<Difficulty, DifficultyProfile> = {
   // ~one note every 2 beats
-  easy: { stepBeats: 2, fillChance: 0.8, chordChance: 0, minGapMs: 500 },
+  easy: { stepBeats: 2, fillChance: 0.8, chordChance: 0, minGapMs: 500, holdChance: 0.22, holdBeats: 2 },
   // ~one note every beat
-  medium: { stepBeats: 1, fillChance: 0.85, chordChance: 0, minGapMs: 320 },
+  medium: { stepBeats: 1, fillChance: 0.85, chordChance: 0, minGapMs: 320, holdChance: 0.18, holdBeats: 1.5 },
   // quarter grid + occasional eighths/chords
-  hard: { stepBeats: 0.5, fillChance: 0.7, chordChance: 0.05, minGapMs: 240 },
+  hard: { stepBeats: 0.5, fillChance: 0.7, chordChance: 0.05, minGapMs: 240, holdChance: 0.12, holdBeats: 1 },
   // eighth grid + chords. On a touchscreen "expert" means denser + more chords,
   // not literally faster than fingers can travel, so the gap floor still applies.
-  expert: { stepBeats: 0.5, fillChance: 0.95, chordChance: 0.18, minGapMs: 200 },
+  expert: { stepBeats: 0.5, fillChance: 0.95, chordChance: 0.18, minGapMs: 200, holdChance: 0.08, holdBeats: 1 },
 };
 
 /**
@@ -135,11 +141,19 @@ export function generateAutoChart(opts: AutoMapOptions): RhythmChart {
     previousLane = lane;
     lastNoteMs = timeMs;
 
-    notes.push({ id: makeNoteId("auto"), timeMs, lane, type: "tap" });
+    const isChord = profile.chordChance > 0 && rng() < profile.chordChance;
 
-    if (profile.chordChance > 0 && rng() < profile.chordChance) {
-      const partner = chordPartnerLane(rng, lane);
-      notes.push({ id: makeNoteId("auto"), timeMs, lane: partner, type: "tap" });
+    // A lone note may become a sustain; chords stay as taps so the player isn't
+    // asked to hold two lanes at once on a touchscreen.
+    if (!isChord && profile.holdChance > 0 && rng() < profile.holdChance) {
+      const durationMs = beatsToMs(profile.holdBeats, bpm);
+      notes.push({ id: makeNoteId("auto"), timeMs, lane, durationMs, type: "hold" });
+    } else {
+      notes.push({ id: makeNoteId("auto"), timeMs, lane, type: "tap" });
+      if (isChord) {
+        const partner = chordPartnerLane(rng, lane);
+        notes.push({ id: makeNoteId("auto"), timeMs, lane: partner, type: "tap" });
+      }
     }
   }
 
