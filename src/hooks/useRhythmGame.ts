@@ -23,10 +23,14 @@ import { defaultCalibrationOffsetMs } from "@/game/tuning";
 import { createRuntimeState, makeNoteId, chartDurationMs } from "@/game/chartUtils";
 import {
   applyHit,
+  applyHoldComplete,
+  applyHoldDrop,
   applyMiss,
   createInitialScore,
+  findCompletedHoldIds,
   findNewlyMissedNoteIds,
   isComplete,
+  resolveRelease,
   resolveTap,
 } from "@/game/scoring";
 import type {
@@ -71,6 +75,17 @@ export interface RhythmGame {
   start: () => void;
   togglePause: () => void;
   restart: () => void;
+  /**
+   * Press a lane (finger/key down). Judges the note at the hit line and, if it
+   * is a sustain, begins holding its tail.
+   */
+  pressLane: (lane: Lane) => void;
+  /**
+   * Release a lane (finger/key up). Resolves any sustain being held there:
+   * completing it if the tail is done, or dropping it (combo break) if early.
+   */
+  releaseLane: (lane: Lane) => void;
+  /** @deprecated Use {@link pressLane}. Retained for callers that only tap. */
   tapLane: (lane: Lane) => void;
   /** Called once per animation frame with the current song time (ms). */
   update: (songTimeMs: number) => void;
@@ -146,7 +161,13 @@ export function useRhythmGame(
   const getCalibrationOffsetMs = useCallback(() => calibrationRef.current, []);
 
   const pushFeedback = useCallback(
-    (lane: Lane, rating: HitFeedback["rating"], atMs: number, errorMs: number) => {
+    (
+      lane: Lane,
+      rating: HitFeedback["rating"],
+      atMs: number,
+      errorMs: number,
+      hold?: HitFeedback["hold"],
+    ) => {
       const list = feedbackRef.current;
       // Prune expired entries opportunistically so the array stays small.
       const cutoff = atMs - FEEDBACK_DURATION_MS;
@@ -158,6 +179,7 @@ export function useRhythmGame(
         rating,
         createdAtMs: atMs,
         errorMs,
+        hold,
       });
       feedbackRef.current = pruned;
     },
@@ -230,7 +252,7 @@ export function useRhythmGame(
     }
   }, [audio, beginCountdown, clearCountdownTimer]);
 
-  const tapLane = useCallback(
+  const pressLane = useCallback(
     (lane: Lane) => {
       if (phaseRef.current !== "playing") return;
       const t = audio.getTimeMs();
@@ -250,12 +272,53 @@ export function useRhythmGame(
           judged: true,
           rating: result.rating,
           judgedAtMs: t,
+          // Begin tracking the sustain; taps stay undefined.
+          hold: result.startsHold ? "holding" : undefined,
+          holdStartMs: result.startsHold ? t : undefined,
         });
         setScore((s) => applyHit(s, result.rating));
         pushFeedback(lane, result.rating, t, result.errorMs);
       }
       // Stray taps (no note in window) are intentionally forgiving on a
       // touchscreen: they flash the lane but do not break combo.
+    },
+    [audio, chart.notes, chart.offsetMs, pushFeedback],
+  );
+
+  const releaseLane = useCallback(
+    (lane: Lane) => {
+      if (phaseRef.current !== "playing") return;
+      const t = audio.getTimeMs();
+
+      const result = resolveRelease(
+        chart.notes,
+        runtimeRef.current,
+        lane,
+        t,
+        chart.offsetMs,
+        calibrationRef.current,
+      );
+
+      if (result.kind === "completed") {
+        const prev = runtimeRef.current.get(result.note.id);
+        runtimeRef.current.set(result.note.id, {
+          ...(prev ?? { judged: true }),
+          hold: "completed",
+          holdEndMs: t,
+        });
+        setScore((s) => applyHoldComplete(s, result.note.durationMs ?? 0));
+        pushFeedback(lane, "perfect", t, 0, "completed");
+      } else if (result.kind === "dropped") {
+        const prev = runtimeRef.current.get(result.note.id);
+        runtimeRef.current.set(result.note.id, {
+          ...(prev ?? { judged: true }),
+          hold: "dropped",
+          holdEndMs: t,
+        });
+        setScore((s) => applyHoldDrop(s));
+        pushFeedback(lane, "miss", t, 0, "dropped");
+      }
+      // No sustain in this lane → releasing is a harmless no-op.
     },
     [audio, chart.notes, chart.offsetMs, pushFeedback],
   );
@@ -289,6 +352,34 @@ export function useRhythmGame(
         );
       }
 
+      // Auto-complete sustains the player kept pressed through the tail's end,
+      // so a held note resolves even without an explicit release event.
+      const completedHoldIds = findCompletedHoldIds(
+        chart.notes,
+        runtimeRef.current,
+        songTimeMs,
+        chart.offsetMs,
+        calibrationRef.current,
+      );
+
+      if (completedHoldIds.length > 0) {
+        let bonusDurations = 0;
+        for (const id of completedHoldIds) {
+          const note = chart.notes.find((n) => n.id === id);
+          const prev = runtimeRef.current.get(id);
+          runtimeRef.current.set(id, {
+            ...(prev ?? { judged: true }),
+            hold: "completed",
+            holdEndMs: songTimeMs,
+          });
+          if (note) {
+            bonusDurations += note.durationMs ?? 0;
+            pushFeedback(note.lane, "perfect", songTimeMs, 0, "completed");
+          }
+        }
+        setScore((s) => applyHoldComplete(s, bonusDurations));
+      }
+
       // End the run once the song is over (covers trailing silence too).
       if (durationRef.current > 0 && songTimeMs >= durationRef.current + 250) {
         setPhase("finished");
@@ -298,12 +389,19 @@ export function useRhythmGame(
     [audio, chart.notes, chart.offsetMs, pushFeedback],
   );
 
-  // Finish as soon as every note has been judged.
+  // Finish as soon as every note has been judged — but not while a hold's tail
+  // is still being held. A sustain's head counts as the note's single judgement,
+  // so isComplete() can flip true the instant the last head is hit; ending then
+  // would cut off the sustain (and its bonus) mid-hold. When the hold resolves,
+  // the score changes and re-runs this effect (and update() auto-completes the
+  // tail), so the finish just waits one beat for the last sustain to land.
   useEffect(() => {
-    if (phase === "playing" && isComplete(score)) {
-      setPhase("finished");
-      audio.stop();
+    if (phase !== "playing" || !isComplete(score)) return;
+    for (const state of runtimeRef.current.values()) {
+      if (state.hold === "holding") return;
     }
+    setPhase("finished");
+    audio.stop();
   }, [phase, score, audio]);
 
   const adjustCalibration = useCallback((deltaMs: number) => {
@@ -328,7 +426,9 @@ export function useRhythmGame(
       start,
       togglePause,
       restart,
-      tapLane,
+      pressLane,
+      releaseLane,
+      tapLane: pressLane,
       update,
       adjustCalibration,
       resetCalibration,
@@ -342,7 +442,8 @@ export function useRhythmGame(
       start,
       togglePause,
       restart,
-      tapLane,
+      pressLane,
+      releaseLane,
       update,
       adjustCalibration,
       resetCalibration,

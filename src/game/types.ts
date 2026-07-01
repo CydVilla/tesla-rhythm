@@ -12,8 +12,9 @@ export type Lane = 0 | 1 | 2 | 3 | 4;
 export type Difficulty = "easy" | "medium" | "hard" | "expert";
 
 /**
- * For the touchscreen MVP only "tap" is actually playable, but "hold" is
- * modelled in the data so charts and the editor can round-trip sustains later.
+ * A "tap" is judged by a single touch as the gem crosses the hit line. A "hold"
+ * (aka sustain) is judged by hitting the head like a tap AND then keeping the
+ * lane pressed for the note's `durationMs` — Guitar Hero / Rock Band style.
  */
 export type NoteType = "tap" | "hold";
 
@@ -43,6 +44,17 @@ export interface RhythmChart {
 
 export type HitRating = "perfect" | "great" | "good" | "miss";
 
+/**
+ * Lifecycle of a hold note's sustain, tracked once its head has been judged:
+ *  - "holding":   head was hit, the lane is still pressed, sustain in progress.
+ *  - "completed": the lane stayed pressed through the tail (sustain earned).
+ *  - "dropped":   the lane was released early (sustain broken → combo break).
+ *
+ * A hold whose head is never hit is a plain "miss" (its head times out like any
+ * tap) and never enters this state machine.
+ */
+export type HoldPhase = "holding" | "completed" | "dropped";
+
 /** A non-miss judgement that actually awards points and advances combo. */
 export type HitJudgement = Exclude<HitRating, "miss">;
 
@@ -67,6 +79,15 @@ export interface NoteRuntimeState {
   rating?: HitRating;
   /** When the note was judged, in song time ms (for fading feedback out). */
   judgedAtMs?: number;
+  /**
+   * Sustain lifecycle for hold notes. Undefined for taps and for holds whose
+   * head has not been hit yet. Set to "holding" the instant the head is hit.
+   */
+  hold?: HoldPhase;
+  /** Song time (ms) the sustain was started (head hit). */
+  holdStartMs?: number;
+  /** Song time (ms) the sustain resolved (completed or dropped). */
+  holdEndMs?: number;
 }
 
 /** Transient feedback shown after a hit or miss, consumed by the renderer. */
@@ -78,6 +99,11 @@ export interface HitFeedback {
   createdAtMs: number;
   /** Signed timing error in ms (negative = early, positive = late). */
   errorMs: number;
+  /**
+   * Marks feedback produced by a sustain resolving (rather than a plain tap) so
+   * the renderer can label it "HOLD" / "DROP" instead of a timing rating.
+   */
+  hold?: "completed" | "dropped";
 }
 
 /** Result of attempting to hit a note in a lane at a given time. */
@@ -87,10 +113,31 @@ export type HitResult =
       note: ChartNote;
       rating: HitJudgement;
       errorMs: number;
+      /** True when the note is a sustain whose tail must now be held. */
+      startsHold: boolean;
     }
   | {
       kind: "miss-input";
       /** Tap registered but no note was within the good window. */
+    };
+
+/** Result of releasing a lane, resolving any sustain currently held there. */
+export type HoldReleaseResult =
+  | {
+      /** The lane was released after holding the tail long enough — sustain earned. */
+      kind: "completed";
+      note: ChartNote;
+    }
+  | {
+      /** The lane was released before the tail finished — sustain broken. */
+      kind: "dropped";
+      note: ChartNote;
+      /** How many ms early the release was (relative to the sustain end). */
+      earlyMs: number;
+    }
+  | {
+      /** No sustain was being held in that lane. */
+      kind: "none";
     };
 
 export type GamePhase = "idle" | "countdown" | "playing" | "paused" | "finished";

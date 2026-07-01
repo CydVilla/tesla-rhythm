@@ -29,6 +29,22 @@ export function effectiveNoteTimeMs(
 }
 
 /**
+ * The song-time position (ms) at which a hold note's sustain ends — i.e. the
+ * effective head time plus the sustain length. This is the moment the player is
+ * allowed to release without dropping the hold.
+ */
+export function sustainEndTimeMs(
+  note: Pick<ChartNote, "timeMs" | "durationMs">,
+  chartOffsetMs: number,
+  calibrationOffsetMs: number,
+): number {
+  return (
+    effectiveNoteTimeMs(note, chartOffsetMs, calibrationOffsetMs) +
+    (note.durationMs ?? 0)
+  );
+}
+
+/**
  * Signed timing error for a tap at `songTimeMs` against a note.
  * Negative = the player tapped early, positive = late.
  */
