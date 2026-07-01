@@ -10,6 +10,9 @@
 # production
 /build
 
+# local metrics store (server-side JSONL written at runtime)
+/.data/
+
 # misc
 .DS_Store
 *.pem

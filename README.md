@@ -28,6 +28,13 @@ catalog tracks!) are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md).
   multipliers (×1 / ×2 / ×3 / ×4).
 - 🎚️ Calibration offset control for audio/input sync (−10 / +10 / reset).
 - 🖱️⌨️📱 Mouse, touch (Pointer Events), and keyboard (A/S/D/F/G + Space).
+- 📊 **Metrics dashboard** (`/dashboard`) — anonymous, gameplay-only telemetry
+  (accuracy, miss rates, calibration, per-track stats) with an "all players" vs
+  "this device" view and privacy controls (opt-out / clear).
+- 🤖 **Autonomous self-improvement loop** — the app analyzes aggregated play data
+  and opens PRs that nudge bounded tuning (default calibration + note density)
+  toward what real players do. See
+  [`docs/metricsAndSelfImprovement.md`](./docs/metricsAndSelfImprovement.md).
 
 ## Getting started
 
@@ -61,15 +68,17 @@ paste-a-link flow — nothing breaks.
 - `/catalog` — browse all tracks and their contributors; play any of them.
 - `/upload` — upload audio, pick difficulty + BPM, credit yourself, generate a chart.
 - `/editor` — read-only chart viewer (full editor is a future iteration).
+- `/dashboard` — anonymous metrics + autonomous tuning recommendations.
 
 ### Scripts
 
 ```bash
-npm run dev        # start dev server
-npm run build      # production build
-npm run start      # serve production build
-npm run typecheck  # tsc --noEmit
-npm run lint       # next lint
+npm run dev             # start dev server
+npm run build           # production build
+npm run start           # serve production build
+npm run typecheck       # tsc --noEmit
+npm run lint            # next lint
+npm run analyze:metrics # run the self-improvement analyzer (see below)
 ```
 
 ### Dependencies & automated updates
@@ -101,6 +110,29 @@ npx npm-check-updates -u   # bump package.json to latest
 npm install
 npm run typecheck && npm run build
 ```
+
+## Metrics & self-improvement
+
+The game keeps a data-driven feedback loop that improves itself over time:
+
+1. **Collect** — when a song finishes, an anonymous `PlaySessionEvent` (score,
+   accuracy, per-rating counts, calibration, difficulty, track) is stored in the
+   browser and (opt-out) posted to `POST /api/metrics/session`. There are no
+   accounts and nothing links data to a person.
+2. **Visualize** — `/dashboard` renders the aggregates: accuracy distribution,
+   per-difficulty miss rates, per-track stats, and calibration — for **all
+   players** (server) or **this device** (local, works offline).
+3. **Decide** — a pure engine (`src/lib/metrics/insights.ts`) turns the
+   aggregates into small, **bounded** tuning changes: the default calibration
+   drifts toward the median players dial in; per-difficulty note density adapts
+   to real miss rates.
+4. **Ship safely** — a scheduled workflow (`.github/workflows/self-improve.yml`)
+   runs the analyzer, and if a change is recommended, opens a PR editing only
+   `src/game/tuning.json` (+ a report). The existing **CI** gate must pass before
+   it can merge, so a bad tune can't land unreviewed.
+
+Full write-up (privacy, storage, how to enable the loop, how to extend it):
+[`docs/metricsAndSelfImprovement.md`](./docs/metricsAndSelfImprovement.md).
 
 ## How to play
 
@@ -172,6 +204,8 @@ src/
     catalog/page.tsx   # track catalog + contributors
     upload/page.tsx    # upload + chart generation
     editor/page.tsx    # chart viewer placeholder
+    dashboard/         # metrics dashboard + self-improvement recommendations
+    api/metrics/       # POST session, GET summary, GET insights (Node routes)
   components/          # React UI (rendering + panels)
     GameScreen.tsx     # composition root for a play session
     GameCanvas.tsx     # Canvas renderer + rAF loop + tap-the-note input
@@ -182,6 +216,7 @@ src/
   game/                # PURE TypeScript engine — no React, no DOM
     types.ts           # domain types (Lane, ChartNote, RhythmChart, ScoreState…)
     constants.ts       # hit windows, lane count, scroll speed, scoring values
+    tuning.ts/.json    # auto-tunable params the self-improvement loop may rewrite
     timing.ts          # offset/calibration math, note travel progress
     scoring.ts         # hit detection, rating, combo, miss marking, accuracy
     chartUtils.ts      # ids, sorting, validation, runtime-state construction
@@ -199,10 +234,13 @@ src/
     activeSong.ts      # in-memory hand-off between routes → /play
     analyzeClient.ts   # decode + drive the analysis worker (main thread)
     cloneHeroClient.ts # unzip + inspect/import Clone Hero songs in-browser
+    metrics/           # analytics: types, aggregate, insights, store, client
   workers/
     analyzeWorker.ts   # runs audioAnalysis off the main thread
+scripts/
+  apply-tuning.mjs     # self-improvement analyzer → rewrites tuning.json + report
 docs/                  # future-work plans + references
-.github/               # issue forms (bug / feature / track) + PR template
+.github/               # issue forms + PR template + CI / auto-merge / self-improve
 ```
 
 ### Design principles
@@ -246,7 +284,9 @@ dev server, check `/catalog`, and open a PR.
 
 Server-side ML audio analysis, stem separation, multi-stem mixing, accounts,
 payments, a persistent online song library, copyrighted-song hosting, and native
-Tesla integration. (Client-side onset/tempo analysis **and** Clone Hero import —
+Tesla integration. (Anonymous, gameplay-only metrics **and** an autonomous
+self-improvement loop that PRs bounded tuning changes **are** built — see
+`docs/metricsAndSelfImprovement.md`.) (Client-side onset/tempo analysis **and** Clone Hero import —
 `.sng` / `.zip` / `.chart` / `.mid` — **are** built; see above.) See `docs/` for
 the plans:
 
