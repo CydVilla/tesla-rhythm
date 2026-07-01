@@ -1,0 +1,65 @@
+{
+  "_comment": "Fixture matching the /api/metrics/insights response. Used to dry-run scripts/apply-tuning.mjs offline: METRICS_FILE=docs/metrics/sample-insights.json npm run analyze:metrics",
+  "summary": {
+    "generatedAt": "2026-07-01T00:00:00.000Z",
+    "totalSessions": 128,
+    "uniquePlayers": 37,
+    "totalNotesHit": 41230,
+    "overallAccuracy": 86.4,
+    "completionRate": 0.79,
+    "medianCalibrationOffsetMs": 34,
+    "accuracyBuckets": [
+      { "label": "0–50%", "count": 6 },
+      { "label": "50–70%", "count": 18 },
+      { "label": "70–85%", "count": 40 },
+      { "label": "85–95%", "count": 44 },
+      { "label": "95–100%", "count": 20 }
+    ],
+    "byDifficulty": [
+      { "difficulty": "easy", "plays": 30, "avgAccuracy": 96.2, "avgMissRate": 0.05, "completionRate": 0.97 },
+      { "difficulty": "medium", "plays": 44, "avgAccuracy": 88.1, "avgMissRate": 0.14, "completionRate": 0.86 },
+      { "difficulty": "hard", "plays": 34, "avgAccuracy": 78.3, "avgMissRate": 0.22, "completionRate": 0.65 },
+      { "difficulty": "expert", "plays": 20, "avgAccuracy": 61.5, "avgMissRate": 0.41, "completionRate": 0.35 }
+    ],
+    "topTracks": [],
+    "recentSessions": []
+  },
+  "report": {
+    "generatedAt": "2026-07-01T00:00:00.000Z",
+    "basedOnSessions": 128,
+    "actionable": true,
+    "recommendations": [
+      {
+        "id": "calibration-resync",
+        "severity": "suggestion",
+        "title": "Adjust default calibration",
+        "detail": "Players dial in a median offset of 34ms. Nudging the default from 0ms to 17ms so most players don't have to touch calibration."
+      },
+      {
+        "id": "density-up-easy",
+        "severity": "suggestion",
+        "title": "Add challenge to \"easy\" charts",
+        "detail": "Only 5% misses at 96.2% accuracy over 30 plays — players want more. Raising note density (1 → 1.05)."
+      },
+      {
+        "id": "density-down-expert",
+        "severity": "warning",
+        "title": "Ease up \"expert\" charts",
+        "detail": "41% average miss rate over 20 plays. Lowering note density (1 → 0.9)."
+      }
+    ],
+    "currentTuning": {
+      "version": 1,
+      "updatedAt": "2026-07-01",
+      "defaultCalibrationOffsetMs": 0,
+      "difficultyDensityScale": { "easy": 1, "medium": 1, "hard": 1, "expert": 1 }
+    },
+    "recommendedTuning": {
+      "version": 2,
+      "updatedAt": "2026-07-01",
+      "defaultCalibrationOffsetMs": 17,
+      "difficultyDensityScale": { "easy": 1.05, "medium": 1, "hard": 1, "expert": 0.9 },
+      "notes": "Auto-tuned from 128 sessions on 2026-07-01."
+    }
+  }
+}
