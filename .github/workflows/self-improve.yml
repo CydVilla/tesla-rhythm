@@ -1,0 +1,75 @@
+name: Self-improve (auto-tune)
+
+# Autonomous continuous-improvement loop.
+#
+# On a schedule it pulls aggregated, anonymous play metrics from a running
+# deployment (or a fixtures file), asks the app's own insights engine what to
+# change, and — if it recommends a small, bounded tuning tweak — opens a PR that
+# rewrites src/game/tuning.json plus a report. CI (Typecheck & build) gates the
+# PR exactly like a dependency update, so a bad tune can never land unchecked.
+#
+# Setup (one-time, by a maintainer):
+#   - Add a repo variable or secret METRICS_ENDPOINT = https://your-deployment
+#     (the URL where /api/metrics/insights is reachable). Without it the job
+#     no-ops. Alternatively set METRICS_FILE to a committed fixtures path.
+#   - Optional: add a SELF_IMPROVE_TOKEN secret (a PAT with repo scope) so the
+#     opened PR triggers CI. PRs opened with the default GITHUB_TOKEN do not
+#     trigger other workflows.
+
+on:
+  schedule:
+    # Weekly, Monday 06:00 UTC.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: self-improve
+  cancel-in-progress: true
+
+jobs:
+  auto-tune:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Analyze metrics and apply tuning
+        id: analyze
+        env:
+          METRICS_ENDPOINT: ${{ secrets.METRICS_ENDPOINT || vars.METRICS_ENDPOINT }}
+          METRICS_FILE: ${{ vars.METRICS_FILE }}
+        run: node scripts/apply-tuning.mjs
+
+      - name: Open pull request
+        if: ${{ steps.analyze.outputs.changed == 'true' }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.SELF_IMPROVE_TOKEN || secrets.GITHUB_TOKEN }}
+          branch: auto/self-improve-tuning
+          delete-branch: true
+          commit-message: "chore(tuning): auto-tune from play metrics"
+          title: "Auto-tune gameplay from play metrics"
+          body: |
+            This PR was opened automatically by the **self-improvement loop**.
+
+            It analyzed anonymous, aggregated play metrics and adjusted the
+            bounded values in `src/game/tuning.json` (default calibration and/or
+            per-difficulty note density). See `docs/metrics/latest-report.md` in
+            this PR for the reasoning.
+
+            All changes are clamped to safe ranges. CI (Typecheck & build) must
+            pass before this can merge — please skim the report and merge if the
+            numbers look reasonable.
+          labels: |
+            automated
+            self-improvement
+          add-paths: |
+            src/game/tuning.json
+            docs/metrics/latest-report.md

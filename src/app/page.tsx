@@ -40,6 +40,9 @@ export default function LandingPage(): React.JSX.Element {
           <Link href="/editor" className={styles.subnavLink}>
             Chart editor (preview)
           </Link>
+          <Link href="/dashboard" className={styles.subnavLink}>
+            Metrics dashboard
+          </Link>
         </nav>
       </section>
 
